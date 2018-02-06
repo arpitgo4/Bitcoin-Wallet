@@ -2,7 +2,6 @@ import React, { Component } from'react';
 import { browserHistory } from 'react-router';
 
 import Crypto from 'crypto';
-import SecureRandom from 'secure-random';
 import Ecdsa from 'ecdsa';
 import BigInteger from 'bigi';
 import CoinKey from 'coinkey';
@@ -15,10 +14,7 @@ export default class Transaction extends Component {
     constructor(props) {
         super(props);
         this.state = {
-            transaction: {
-                hex: '',
-                signature: ''
-            }
+            transaction: null           /* { hex: '', signature: '' } */ 
         };
     }
 
@@ -54,6 +50,27 @@ export default class Transaction extends Component {
                             className="btn btn-danger btn-lg pull-right">Cancel</button>
                     </div>
                     {this.state.transaction ? this._renderTransaction() : null}
+                </div>
+            </div>
+        );
+    }
+
+    _renderTransaction() {
+        const { hex, signature } = this.state.transaction;
+
+        return (
+            <div className="row">
+                <div className="col-md-12" style={{ wordWrap: 'break-word' }}>
+                    <p className="lead">
+                        Transaction Hex:
+                        <p className="mark lead">{hex}</p>
+                    </p>
+                    
+                    <p className="lead">
+                        Transaction Signature:
+                        <p className="mark lead">{signature}</p>
+                    </p>
+                    
                 </div>
             </div>
         );
@@ -132,19 +149,6 @@ export default class Transaction extends Component {
         };
 
         return transaction;
-    }
-
-    _renderTransaction() {
-        const { hex, signature } = this.state.transaction;
-
-        return (
-            <div className="row">
-                <div className="col-md-12" style={{ wordWrap: 'break-word' }}>
-                    <p className="lead">Transaction Hex: <br/> {hex}</p>
-                    <p className="lead">Transaction Signature: {signature}</p>
-                </div>
-            </div>
-        );
     }
 
 }

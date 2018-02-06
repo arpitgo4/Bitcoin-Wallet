@@ -1,7 +1,6 @@
 import React, { Component } from 'react';
 import { Link } from 'react-router';
 import CoinKey from 'coinkey';
-import SecureRandom from 'secure-random';
 
 import { setAppState, getAppState } from '../layouts/AppState';
 
@@ -36,8 +35,11 @@ export default class App extends Component {
         return (
             <div className="row">
                 <div className="col-md-12">
-                    <p className="lead">Private Key: {privateKey}</p>
-                    <p className="text-danger">**Copy and save the private key somewhere safe</p>
+                    <p className="lead">
+                        Private Key:
+                        <p className="lead mark">{privateKey}</p>
+                    </p>
+                    <p className="text-danger lead">**Copy and save the private key somewhere safe</p>
                     <Link to="/wallet">                                    
                         <button 
                             style={{ margin: 5 }}

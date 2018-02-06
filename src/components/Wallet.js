@@ -46,10 +46,12 @@ export default class Wallet extends Component {
                                         <div className="row">
                                             <div className="col-md-12">
                                                 <p className="lead">
-                                                    Public Address: {publicAddress}
+                                                    Public Address:
+                                                    <p className="lead mark">{publicAddress}</p>
                                                 </p>
                                                 <p className="lead">
-                                                    Public Key: {publicKey}
+                                                    Public Key:
+                                                    <p className="lead mark">{publicKey}</p>
                                                 </p>
                                             </div>
                                         </div>
