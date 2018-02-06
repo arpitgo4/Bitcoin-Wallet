@@ -1,4 +1,5 @@
 import React, { Component } from'react';
+import { browserHistory } from 'react-router';
 
 import Crypto from 'crypto';
 import SecureRandom from 'secure-random';
@@ -6,13 +7,19 @@ import Ecdsa from 'ecdsa';
 import BigInteger from 'bigi';
 import CoinKey from 'coinkey';
 
-import { convertPublicKeyToAddress, sha256Hash } from './utils';
+import { getAppState, setAppState } from '../layouts/AppState';
+import { convertPublicKeyToAddress, sha256Hash, goToPreviousPage } from './utils';
 
 export default class Transaction extends Component {
 
     constructor(props) {
         super(props);
-        this.state = {};
+        this.state = {
+            transaction: {
+                hex: '',
+                signature: ''
+            }
+        };
     }
 
     render() {
@@ -22,14 +29,17 @@ export default class Transaction extends Component {
                     <p className="lead">Send Transaction </p>
 
                     <div style={{ margin: 10 }}>
+                        <label className="lead">Recepient's Address:</label>
                         <input className="form-control" ref="address" placeholder="Recepient's Address" />
                     </div>
 
                     <div style={{ margin: 10}}>
+                        <label className="lead">Amount:</label>
                         <input className="form-control" ref="amount" placeholder="Amount" />
                     </div>
 
                     <div style={{ margin: 10}}>
+                        <label className="lead">Your Private Key:</label>
                         <input className="form-control" ref="privateKey" placeholder="Your Private Key" />
                     </div>
 
@@ -38,7 +48,10 @@ export default class Transaction extends Component {
                             style={{ margin: 5 }} 
                             onClick={this.sendTransaction.bind(this)}
                             className="btn btn-success btn-lg pull-right">Send</button>
-                        <button style={{ margin: 5 }} className="btn btn-danger btn-lg pull-right">Cancel</button>
+                        <button 
+                            onClick={goToPreviousPage}
+                            style={{ margin: 5 }} 
+                            className="btn btn-danger btn-lg pull-right">Cancel</button>
                     </div>
                     {this.state.transaction ? this._renderTransaction() : null}
                 </div>

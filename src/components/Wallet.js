@@ -1,24 +1,40 @@
 import React, { Component } from 'react';
+
 import CoinKey from 'coinkey';
+
+import { getAppState, setAppState } from '../layouts/AppState';
+import { goToPreviousPage } from './utils';
 
 export default class Wallet extends Component {
 
     constructor(props) {
         super(props);
-        this.state = {};
+        this.state = {
+            publicAddress: '',
+            publicKey: ''
+        };
     }
 
     render() {
+        const { publicAddress, publicKey } = this.state;
+
         return (
             <div className="row">
                 <div className="col-md-12">
                     <div className="row" >
                         <div className="col-md-12">
                             <p className="lead">Paste Your Private Key:</p>
-                            <textarea ref="key" className="form-control"></textarea>
-                            <button style={{ marginTop: 20 }}
+                            <textarea ref="key" 
+                                style={{ marginBottom:20 }}                                
+                                className="form-control"></textarea>
+                            <button style={{ margin: 5 }}
                                 className="btn btn-primary btn-lg"
                                 onClick={this.unlockWallet.bind(this)}>Unlock</button>
+                            <button style={{ margin: 5 }}
+                                className="btn btn-lg"
+                                onClick={goToPreviousPage}>
+                                Back
+                            </button>
                         </div>
                     </div>
 
@@ -26,14 +42,14 @@ export default class Wallet extends Component {
                         <div className="col-md-12">
 
                             <div style={{ marginTop: 20 }}>
-                                    { this.state.publicAddress ? (
+                                    { publicAddress ? (
                                         <div className="row">
                                             <div className="col-md-12">
                                                 <p className="lead">
-                                                    Public Address: {this.state.publicAddress}
+                                                    Public Address: {publicAddress}
                                                 </p>
                                                 <p className="lead">
-                                                    Public Key: {this.state.publicKey}
+                                                    Public Key: {publicKey}
                                                 </p>
                                             </div>
                                         </div>
