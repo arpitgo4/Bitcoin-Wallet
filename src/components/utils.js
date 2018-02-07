@@ -19,3 +19,13 @@ export const convertPrivateKeyToAddress = privateKey =>
 export const sha256Hash = data => Crypto.createHash('sha256').update(data).digest();
 
 export const goToPreviousPage = () => browserHistory.goBack();
+
+export const reverseHexString = hexString => {
+    const len = hexString.length;
+    let result = '';
+
+    for(let idx = 0; idx < len; idx+=2)
+        result = hexString[idx] + hexString[idx+1] + result;
+
+    return result;
+};

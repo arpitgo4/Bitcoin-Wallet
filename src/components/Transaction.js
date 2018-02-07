@@ -12,7 +12,8 @@ import {
     sha256Hash, 
     goToPreviousPage,
     convertPrivateKeyToPublicKey,
-    convertPrivateKeyToAddress 
+    convertPrivateKeyToAddress,
+    reverseHexString
 } from './utils';
 import { OP_CODES_HEX } from './constants';
 
@@ -158,7 +159,7 @@ export default class Transaction extends Component {
                 {
                     "txid": "7957a35fe64f80d234d76d83a2a8f1a0d8149a41d81de548f0a65a8a999f6f18",
                     "vout": 0,
-                    "scriptSig" : `3045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e3813[ALL]0484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adf`,
+                    "scriptSig" : "3045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adf",
                     "sequence": 4294967295
                 }
             ],
@@ -174,10 +175,11 @@ export default class Transaction extends Component {
             ]
         };
 
-        const bufTxOut = this.serializeTxOut(transaction.vout);
-        console.log(bufTxOut.toString('hex'));
+        //const bufTxOut = this.serializeTxOut(transaction.vout);
+        //console.log(bufTxOut.toString('hex'));
 
-        //this.parseTxIn(transaction.vin);
+        const bufTxIn = this._serializeTxIn(transaction.vin);
+        console.log(bufTxIn.toString('hex'));
 
         return transaction;
     }
@@ -209,15 +211,27 @@ export default class Transaction extends Component {
         return Buffer.concat(bufList);
     }
 
-    parseTxIn(txIn) {
+    _serializeTxIn(txIn) {
         const bufList = [];
         for(let tin of txIn) {
-            const tx = Buffer.alloc(50);
-            tx.write(tin.txid, 0);
-            tx.writeUInt8(tin.vout, 32);
-            tx.writeUInt8(tin.scriptSig.length, 36);
-            tx.write(tin.scriptSig, 38);
-            tx.writeUInt8(tin.sequence, 38+tin.scriptSig.length);
+            const scriptSize = Buffer.from(tin.scriptSig.toString(16), 'hex').length;
+        
+            const tx = Buffer.alloc(scriptSize + 32 + 4 + 2 + 4);
+
+            tx.write(reverseHexString(tin.txid), 0, 32, 'hex');
+            tx.writeIntBE(tin.vout, 32, 4);
+
+            // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa35779000000008b483045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e381301410484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adfffffffff
+            // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa3577900000000003045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adfffffffff00
+
+            console.log('script size', scriptSize);
+
+            tx.writeIntBE(139, 36, 2);
+
+            tx.write(tin.scriptSig, 37, 'hex');
+            tx.write(tin.sequence.toString(16), 37+scriptSize,'hex');
+
+            console.log('tin', tx.toString('hex'));
 
             bufList.push(tx);
         }
@@ -228,16 +242,16 @@ export default class Transaction extends Component {
     _parseTxOutScript(script) {
         const [ OP_1, OP_2, PUB_KEY, OP_3, OP_4 ] = script.split(' ');
 
-        const tx = [
+        const txScript = [
             OP_CODES_HEX[OP_1].toString(16),
             OP_CODES_HEX[OP_2].toString(16),
-            Buffer.from(PUB_KEY, 'hex').length.toString(16),
+            Buffer.from(PUB_KEY, 'hex').length,
             PUB_KEY,
             OP_CODES_HEX[OP_3].toString(16),
             OP_CODES_HEX[OP_4].toString(16)
         ].join('');
         
-        return Buffer.from(tx, 'hex');
+        return Buffer.from(txScript, 'hex');
     }
 
 }
