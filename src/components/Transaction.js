@@ -7,7 +7,13 @@ import BigInteger from 'bigi';
 import CoinKey from 'coinkey';
 
 import { getAppState, setAppState } from '../layouts/AppState';
-import { convertPublicKeyToAddress, sha256Hash, goToPreviousPage } from './utils';
+import { 
+    convertPublicKeyToAddress, 
+    sha256Hash, 
+    goToPreviousPage,
+    convertPrivateKeyToPublicKey,
+    convertPrivateKeyToAddress 
+} from './utils';
 
 export default class Transaction extends Component {
 
@@ -76,20 +82,23 @@ export default class Transaction extends Component {
         );
     }
 
-    // private_key = CoinKey().createRandom()
-    // public_key = CoinKey(private_key).publicKey
+    // private_key = new CoinKey().createRandom()
+    // public_key = new CoinKey(private_key).publicKey
     // public_address = sha256Hash(public_key)
     sendTransaction() {
-        const { amount: amountRef, privateKey: privateKeyRef, address: addressRef } = this.refs;
+        const { amount: amountRef, 
+                privateKey: privateKeyRef, address: addressRef } = this.refs;
 
-        const transaction = this._createTransaction();
+        const transaction = this._createTransaction(
+                        privateKeyRef.value, addressRef.value, amountRef.value);
+
         const rawTransactionString = this._getRawTransactionString(transaction);
-        const transactionHex = new Buffer(rawTransactionString).toString('hex');
+        const transactionHex = Buffer.from(rawTransactionString, 'hex');
 
         const shaDigest = sha256Hash(transactionHex);
 
         const privateKeyHex = privateKeyRef.value;
-        const ck = new CoinKey(new Buffer(privateKeyHex, 'hex'), true);
+        const ck = new CoinKey(Buffer.from(privateKeyHex, 'hex'), true);
         
         const signature = Ecdsa.sign(shaDigest, BigInteger.fromBuffer(ck.privateKey));
 
@@ -97,6 +106,7 @@ export default class Transaction extends Component {
         // const isValid = Ecdsa.verify(shaDigest, signature, BigInteger.fromBuffer(ck.publicKey));
         // console.log('Signature Verification:', isValid);
 
+        // TODO: encode the signature by DER encoding appending the SHA_HASH_FLAG
         const transactionSignature = signature.r.toString() + signature.s.toString();
 
         this.setState({
@@ -115,9 +125,16 @@ export default class Transaction extends Component {
         return txString;
     }
 
-    _createTransaction() {
+    // TODO: add script's sizes before their source.
+    // P2PKH (Pay to Public Key Hash)
+    _createTransaction(senderPrivateKey, recepientAddress, amount) {
+
+        const senderPublicKey = convertPrivateKeyToPublicKey(senderPrivateKey);
+        const senderAddress = convertPrivateKeyToAddress(senderPrivateKey);
+        const amountToSend = amount / 2;
+
         // dummy transaction { version, locktime, vin, vout }
-        // vin { txid, vout, scriptSig (unlocking script), sequence }
+        // vin { txid, vout, scriptSig (unlocking script, DER encoded), sequence }
         // vout { value, scriptPubkey (locking script) }
         const transaction = {
             "version": 1,
@@ -136,14 +153,15 @@ export default class Transaction extends Component {
             ],
             "vout": [
                 {
-                    "value": 0.01500000,
+                    "value": amountToSend,
                     "scriptPubKey": `OP_DUP OP_HASH160
-                        ab68025513c3dbd2f7b92a94e0581f5d50f654e7 OP_EQUALVERIFY OP_CHECKSIG`
+                        ${recepientAddress} OP_EQUALVERIFY OP_CHECKSIG`
                 },
+                // change
                 {
-                    "value": 0.08450000,
+                    "value": amountToSend,
                     "scriptPubKey": `OP_DUP OP_HASH160
-                        7f9b1a7fb68d60c536c2fd8aeaa53a8f3cc025a8 OP_EQUALVERIFY OP_CHECKSIG`,
+                        ${senderAddress} OP_EQUALVERIFY OP_CHECKSIG`,
                 }
             ]
         };
