@@ -14,6 +14,7 @@ import {
     convertPrivateKeyToPublicKey,
     convertPrivateKeyToAddress 
 } from './utils';
+import { OP_CODES_HEX } from './constants';
 
 export default class Transaction extends Component {
 
@@ -67,16 +68,12 @@ export default class Transaction extends Component {
         return (
             <div className="row">
                 <div className="col-md-12" style={{ wordWrap: 'break-word' }}>
-                    <p className="lead">
-                        Transaction Hex:
-                        <p className="mark lead">{hex}</p>
-                    </p>
-                    
-                    <p className="lead">
-                        Transaction Signature:
-                        <p className="mark lead">{signature}</p>
-                    </p>
-                    
+                    <p className="lead">Transaction Hex:</p>
+                    <p className="mark lead">{hex}</p>
+
+                    <p className="lead">Transaction Signature:</p>
+                    <p className="mark lead">{signature}</p>
+
                 </div>
             </div>
         );
@@ -93,12 +90,12 @@ export default class Transaction extends Component {
                         privateKeyRef.value, addressRef.value, amountRef.value);
 
         const rawTransactionString = this._getRawTransactionString(transaction);
-        const transactionHex = Buffer.from(rawTransactionString, 'hex');
+        const transactionHex = new Buffer(rawTransactionString).toString('hex');
 
         const shaDigest = sha256Hash(transactionHex);
 
         const privateKeyHex = privateKeyRef.value;
-        const ck = new CoinKey(Buffer.from(privateKeyHex, 'hex'), true);
+        const ck = new CoinKey(new Buffer(privateKeyHex, 'hex'), true);
         
         const signature = Ecdsa.sign(shaDigest, BigInteger.fromBuffer(ck.privateKey));
 
@@ -125,14 +122,32 @@ export default class Transaction extends Component {
         return txString;
     }
 
+    /**
+     * txOut: {
+     *  value: 8 bytes (little endian, in satoshi 1e-8), writeFloatLE()
+     *  locking-script size: 1-9 bytes (varint), writeUInt()
+     *  locking-script: variable, write()
+     * }
+     * max_total: 8+1+9 = 18 bytes
+     */
     // TODO: add script's sizes before their source.
     // P2PKH (Pay to Public Key Hash)
+    /**
+     * txIn: {
+     *  txHash: 32 bytes,
+     *  outputIdx: 4 bytes,
+     *  unlocking-script size: 1-9 bytes (varint)
+     *  unlocking-script: variable
+     *  seq_num: 4 bytes
+     * }
+     * max_total: 32+4+1+9+4 = 50 bytes
+     */
     _createTransaction(senderPrivateKey, recepientAddress, amount) {
 
         const senderPublicKey = convertPrivateKeyToPublicKey(senderPrivateKey);
         const senderAddress = convertPrivateKeyToAddress(senderPrivateKey);
-        const amountToSend = amount / 2;
-
+        const amountToSend = amount / 2; // to send + change
+        
         // dummy transaction { version, locktime, vin, vout }
         // vin { txid, vout, scriptSig (unlocking script, DER encoded), sequence }
         // vout { value, scriptPubkey (locking script) }
@@ -143,30 +158,86 @@ export default class Transaction extends Component {
                 {
                     "txid": "7957a35fe64f80d234d76d83a2a8f1a0d8149a41d81de548f0a65a8a999f6f18",
                     "vout": 0,
-                    "scriptSig" :
-                        `3045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204
-                        b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e3813[ALL]
-                        0484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d1
-                        72787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adf`,
+                    "scriptSig" : `3045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e3813[ALL]0484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adf`,
                     "sequence": 4294967295
                 }
             ],
             "vout": [
                 {
-                    "value": amountToSend,
-                    "scriptPubKey": `OP_DUP OP_HASH160
-                        ${recepientAddress} OP_EQUALVERIFY OP_CHECKSIG`
+                    "value": 0.01500000,
+                    "scriptPubKey": "OP_DUP OP_HASH160 ab68025513c3dbd2f7b92a94e0581f5d50f654e7 OP_EQUALVERIFY OP_CHECKSIG"
                 },
-                // change
                 {
-                    "value": amountToSend,
-                    "scriptPubKey": `OP_DUP OP_HASH160
-                        ${senderAddress} OP_EQUALVERIFY OP_CHECKSIG`,
+                    "value": 0.08450000,
+                    "scriptPubKey": "OP_DUP OP_HASH160 7f9b1a7fb68d60c536c2fd8aeaa53a8f3cc025a8 OP_EQUALVERIFY OP_CHECKSIG"
                 }
             ]
         };
 
+        const bufTxOut = this.serializeTxOut(transaction.vout);
+        console.log(bufTxOut.toString('hex'));
+
+        //this.parseTxIn(transaction.vin);
+
         return transaction;
+    }
+
+    serializeTxOut(txOut) {
+        const bufList = [];
+        for(let out of txOut) {
+    
+            // script (hex)
+            // 76a914ab68025513c3dbd2f7b92a94e0581f5d50f654e788ac (book)
+            // 76a914ab68025513c3dbd2f7b92a94e0581f5d50f654e788ac
+
+            // tx (hex)
+            // 60e31600000000001976a914ab68025513c3dbd2f7b92a94e0581f5d50f654e788ac
+            // 60e31600000000001976a914ab68025513c3dbd2f7b92a94e0581f5d50f654e788ac
+
+            const parsedScriptBuf = this._parseTxOutScript(out.scriptPubKey);
+            const tx = Buffer.alloc(8+1+parsedScriptBuf.length);
+    
+            tx.writeIntLE(out.value*1e8, 0, 8);
+            tx.writeIntBE(parsedScriptBuf.length, 8, 1);
+            tx.write(parsedScriptBuf.toString('hex'), 9, 'hex');
+
+            console.log('tx', tx.toString('hex'));
+
+            bufList.push(tx);
+        }
+
+        return Buffer.concat(bufList);
+    }
+
+    parseTxIn(txIn) {
+        const bufList = [];
+        for(let tin of txIn) {
+            const tx = Buffer.alloc(50);
+            tx.write(tin.txid, 0);
+            tx.writeUInt8(tin.vout, 32);
+            tx.writeUInt8(tin.scriptSig.length, 36);
+            tx.write(tin.scriptSig, 38);
+            tx.writeUInt8(tin.sequence, 38+tin.scriptSig.length);
+
+            bufList.push(tx);
+        }
+
+        return Buffer.concat(bufList);
+    }
+
+    _parseTxOutScript(script) {
+        const [ OP_1, OP_2, PUB_KEY, OP_3, OP_4 ] = script.split(' ');
+
+        const tx = [
+            OP_CODES_HEX[OP_1].toString(16),
+            OP_CODES_HEX[OP_2].toString(16),
+            Buffer.from(PUB_KEY, 'hex').length.toString(16),
+            PUB_KEY,
+            OP_CODES_HEX[OP_3].toString(16),
+            OP_CODES_HEX[OP_4].toString(16)
+        ].join('');
+        
+        return Buffer.from(tx, 'hex');
     }
 
 }
