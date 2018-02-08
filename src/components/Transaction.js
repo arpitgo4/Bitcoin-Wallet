@@ -5,6 +5,7 @@ import Crypto from 'crypto';
 import Ecdsa from 'ecdsa';
 import BigInteger from 'bigi';
 import CoinKey from 'coinkey';
+import varint from 'varint';
 
 import { getAppState, setAppState } from '../layouts/AppState';
 import { 
@@ -112,14 +113,6 @@ export default class Transaction extends Component {
         });
     }
 
-    _getRawTransactionString(tx) {
-        let txString = `${tx.version}${tx.locktime}`;
-        tx.vin.forEach(vi => txString+= `${vi.txid}${vi.vout}${vi.scriptSig}${vi.sequence}`);
-        tx.vout.forEach(vo => txString+= `${vo.value}${vo.scriptPubKey}`);
-
-        return txString;
-    }
-
     /**
      * txOut: {
      *  value: 8 bytes (little endian, in satoshi 1e-8), writeFloatLE()
@@ -185,7 +178,8 @@ export default class Transaction extends Component {
             versionBuffer,
             lockTimeBuffer,
             bufTxIn,
-            bufTxOut
+            bufTxOut,
+            Buffer.alloc(4, 0)      // ??
         ]);
 
         console.log('full tx', tx.toString('hex'));
@@ -203,14 +197,14 @@ export default class Transaction extends Component {
 
             // tx (hex)
             // 60e31600000000001976a914ab68025513c3dbd2f7b92a94e0581f5d50f654e788ac
-            // 60e31600000000001976a914ab68025513c3dbd2f7b92a94e0581f5d50f654e788ac
+            // 60e31600000000001976a920ab68025513c3dbd2f7b92a94e0581f5d50f654e788ac
 
-            const parsedScriptBuf = this._parseTxOutScript(out.scriptPubKey);
+            const parsedScriptBuf = this._pareTxOutScript(out.scriptPubKey);
             const tx = Buffer.alloc(8+1+parsedScriptBuf.length);
     
             tx.writeIntLE(out.value*1e8, 0, 8);
-            tx.writeIntBE(parsedScriptBuf.length, 8, 1);
-            tx.write(parsedScriptBuf.toString('hex'), 9, 'hex');
+            varint.encode(parsedScriptBuf.length, tx, 8);
+            tx.write(parsedScriptBuf.toString('hex'), 8 + varint.encode.bytes, 'hex');
 
             bufList.push(tx);
         }
@@ -230,10 +224,10 @@ export default class Transaction extends Component {
 
             // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa35779000000008b483045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e381301410484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adfffffffff
             // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa357790000000000883045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adfffffffff
+            
+            varint.encode(scriptSize, tx, 36);
 
-            tx.writeIntBE(scriptSize, 36, 2);
-
-            tx.write(tin.scriptSig, 38, 'hex');
+            tx.write(tin.scriptSig, 36 + varint.encode.bytes, 'hex');
             tx.write(tin.sequence.toString(16), 38+scriptSize,'hex');
 
             bufList.push(tx);
@@ -242,7 +236,7 @@ export default class Transaction extends Component {
         return Buffer.concat(bufList);
     }
 
-    _parseTxOutScript(script) {
+    _pareTxOutScript(script) {
         const [ OP_1, OP_2, PUB_KEY, OP_3, OP_4 ] = script.split(' ');
 
         const txScript = [
