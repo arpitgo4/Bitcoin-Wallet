@@ -91,24 +91,26 @@ export default class Transaction extends Component {
         const txBuffer = this._createTransaction(
                         privateKeyRef.value, addressRef.value, amountRef.value);
 
+        // TODO: check whether double/single hash.
         const shaDigest = sha256Hash(txBuffer.toString('hex'));
 
         const privateKeyHex = privateKeyRef.value;
         const ck = new CoinKey(new Buffer(privateKeyHex, 'hex'), true);
         
         const signature = Ecdsa.sign(shaDigest, BigInteger.fromBuffer(ck.privateKey));
+        const serializedSignature = signature.toDER();
 
         // Verification
         // const isValid = Ecdsa.verify(shaDigest, signature, BigInteger.fromBuffer(ck.publicKey));
         // console.log('Signature Verification:', isValid);
 
         // TODO: encode the signature by DER encoding appending the SHA_HASH_FLAG
-        const transactionSignature = signature.r.toString() + signature.s.toString();
+        //const serializedSignature = Ecdsa.serializeSig(signature);
 
         this.setState({
             transaction: {
                 hex: txBuffer.toString('hex'),
-                signature: transactionSignature
+                signature: serializedSignature.toString('hex')
             }
         });
     }
@@ -179,7 +181,7 @@ export default class Transaction extends Component {
             lockTimeBuffer,
             bufTxIn,
             bufTxOut,
-            Buffer.alloc(4, 0)      // ??
+            Buffer.alloc(4, 0)      // extra-data
         ]);
 
         console.log('full tx', tx.toString('hex'));
