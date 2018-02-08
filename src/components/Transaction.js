@@ -16,7 +16,7 @@ import {
     convertPrivateKeyToAddress,
     reverseHexString
 } from './utils';
-import { OP_CODES_HEX } from './constants';
+import { OP_CODES_HEX, SIGHASH } from './constants';
 
 export default class Transaction extends Component {
 
@@ -190,7 +190,7 @@ export default class Transaction extends Component {
         return tx;
     }
 
-    // synced
+    // do not change.
     serializeTxOut(txOut) {
         const bufList = [];
         for(let out of txOut) {
@@ -226,24 +226,39 @@ export default class Transaction extends Component {
         const bufList = [];
         for(let tin of txIn) {
             const scriptSize = Buffer.from(tin.scriptSig.toString(16), 'hex').length;
-            const arb = varuint.encodingLength(47);
-            const tx = Buffer.alloc(scriptSize + 32 + arb + 4 + varuint.encodingLength(scriptSize) + 4);
+
+            const scriptSigBuf = this._parseTxInScript(tin.scriptSig);
+            const scriptSigBufLen = scriptSigBuf.toString('hex').length;
+
+            console.log('txin script', scriptSigBuf.toString('hex'));
+
+            let tx = Buffer.alloc(
+                32 + 4 
+                + varuint.encodingLength(scriptSize)
+                + varuint.encodingLength(scriptSigBufLen)
+                + 4
+            );
 
             // tx outpoint
             tx.write(reverseHexString(tin.txid), 0, 32, 'hex');
             tx.writeInt32LE(tin.vout.toString(16), 32);
 
+            // txin script
+            // fd10013045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adf00
+
             // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa3577900000000 8b48 3045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130 1410 484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adf ffffffff
             // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa3577900000000 582f 3045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130      484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adf 00000000
             
             varuint.encode(scriptSize.toString(16), tx, 36);
-            varuint.encode(47, tx, 36+arb);
 
-            // tin.scriptSig already a hex script
-            tx.write(tin.scriptSig, 36 + arb + varuint.encodingLength(scriptSize), 'hex');
+            varuint.encode(scriptSigBufLen, tx, 36+ varuint.encodingLength(scriptSize));
+            tx = Buffer.concat([ tx, scriptSigBuf ]);
 
-            tx.writeInt32BE(tin.sequence.toString(16), 
-                    36 + arb + varuint.encodingLength(scriptSize) + scriptSize);
+            // to add public key, not sure
+
+            tx.writeInt32BE(100, 
+                                36 + varuint.encodingLength(scriptSize)
+                                 + varuint.encodingLength(scriptSigBufLen));
 
             console.log('txin', tx.toString('hex'));
 
@@ -253,6 +268,7 @@ export default class Transaction extends Component {
         return Buffer.concat(bufList);
     }
 
+    // do not change
     _pareTxOutScript(script) {
         const [ OP_1, OP_2, PUB_KEY, OP_3, OP_4 ] = script.split(' ');
 
@@ -266,6 +282,40 @@ export default class Transaction extends Component {
         ].join('');
         
         return Buffer.from(txScript, 'hex');
+    }
+
+    _parseTxInScript(script) {
+
+        // 473044022034519a85fb5299e180865dda936c5d53edabaaf6d15cd1740aac9878b76238e002207345fcb5a62deeb8d9d80e5b412bd24d09151c2008b7fef10eb5f13e484d1e0d 01 21 0207c9ece04a9b5ef3ff441f3aad6bb63e323c05047a820ab45ebbe61385aa7446
+        // 463044022034519a85fb5299e180865dda936c5d53edabaaf6d15cd1740aac9878b76238e002207345fcb5a62deeb8d9d80e5b412bd24d09151c2008b7fef10eb5f13e484d1e0d 00 21 0207c9ece04a9b5ef3ff441f3aad6bb63e323c05047a820ab45ebbe61385aa7446
+
+        // from siliconian valley site.
+        script = '3044022034519a85fb5299e180865dda936c5d53edabaaf6d15cd1740aac9878b76238e002207345fcb5a62deeb8d9d80e5b412bd24d09151c2008b7fef10eb5f13e484d1e0d0207c9ece04a9b5ef3ff441f3aad6bb63e323c05047a820ab45ebbe61385aa7446'
+
+        // 71 bytes signature size, 2 chars = 1 byte.
+        const signature = script.slice(0, 70*2);
+        const pubKey = script.slice(70*2);
+
+        const signatureBuf = new Buffer(signature, 'hex');
+        const pubKeyBuf = new Buffer(pubKey, 'hex');
+
+        // console.log('signature', signature);
+        // console.log('pubKey', pubKey);
+
+        const sigSizeBuf = varuint.encode(signatureBuf.length+1);
+        const pubKeySizeBuf = varuint.encode(pubKeyBuf.length);
+
+        // wrote SIGHHASH_ALL = 0x01 in the buffer
+        const sighHashBuf = new Buffer(1);
+        sighHashBuf.writeIntBE(SIGHASH.ALL, 0, 1);
+
+        return Buffer.concat([
+            sigSizeBuf,
+            signatureBuf,
+            sighHashBuf,
+            pubKeySizeBuf,
+            pubKeyBuf
+        ]);
     }
 
 }
