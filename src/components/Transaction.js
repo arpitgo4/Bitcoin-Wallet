@@ -87,13 +87,10 @@ export default class Transaction extends Component {
         const { amount: amountRef, 
                 privateKey: privateKeyRef, address: addressRef } = this.refs;
 
-        const transaction = this._createTransaction(
+        const txBuffer = this._createTransaction(
                         privateKeyRef.value, addressRef.value, amountRef.value);
 
-        const rawTransactionString = this._getRawTransactionString(transaction);
-        const transactionHex = new Buffer(rawTransactionString).toString('hex');
-
-        const shaDigest = sha256Hash(transactionHex);
+        const shaDigest = sha256Hash(txBuffer.toString('hex'));
 
         const privateKeyHex = privateKeyRef.value;
         const ck = new CoinKey(new Buffer(privateKeyHex, 'hex'), true);
@@ -109,7 +106,7 @@ export default class Transaction extends Component {
 
         this.setState({
             transaction: {
-                hex: transactionHex,
+                hex: txBuffer.toString('hex'),
                 signature: transactionSignature
             }
         });
@@ -175,13 +172,25 @@ export default class Transaction extends Component {
             ]
         };
 
-        //const bufTxOut = this.serializeTxOut(transaction.vout);
-        //console.log(bufTxOut.toString('hex'));
+        const bufTxOut = this.serializeTxOut(transaction.vout);
+        console.log(bufTxOut.toString('hex'));
 
         const bufTxIn = this._serializeTxIn(transaction.vin);
         console.log(bufTxIn.toString('hex'));
 
-        return transaction;
+        const versionBuffer = Buffer.alloc(1, transaction.version);
+        const lockTimeBuffer = Buffer.alloc(4, transaction.locktime);
+
+        const tx = Buffer.concat([
+            versionBuffer,
+            lockTimeBuffer,
+            bufTxIn,
+            bufTxOut
+        ]);
+
+        console.log('full tx', tx.toString('hex'));
+
+        return tx;
     }
 
     serializeTxOut(txOut) {
@@ -203,8 +212,6 @@ export default class Transaction extends Component {
             tx.writeIntBE(parsedScriptBuf.length, 8, 1);
             tx.write(parsedScriptBuf.toString('hex'), 9, 'hex');
 
-            console.log('tx', tx.toString('hex'));
-
             bufList.push(tx);
         }
 
@@ -222,16 +229,12 @@ export default class Transaction extends Component {
             tx.writeIntBE(tin.vout, 32, 4);
 
             // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa35779000000008b483045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e381301410484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adfffffffff
-            // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa3577900000000003045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adfffffffff00
+            // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa357790000000000883045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adfffffffff
 
-            console.log('script size', scriptSize);
+            tx.writeIntBE(scriptSize, 36, 2);
 
-            tx.writeIntBE(139, 36, 2);
-
-            tx.write(tin.scriptSig, 37, 'hex');
-            tx.write(tin.sequence.toString(16), 37+scriptSize,'hex');
-
-            console.log('tin', tx.toString('hex'));
+            tx.write(tin.scriptSig, 38, 'hex');
+            tx.write(tin.sequence.toString(16), 38+scriptSize,'hex');
 
             bufList.push(tx);
         }
