@@ -5,7 +5,7 @@ import Crypto from 'crypto';
 import Ecdsa from 'ecdsa';
 import BigInteger from 'bigi';
 import CoinKey from 'coinkey';
-import varint from 'varint';
+import varuint from 'varuint-bitcoin';
 
 import { getAppState, setAppState } from '../layouts/AppState';
 import { 
@@ -90,8 +90,7 @@ export default class Transaction extends Component {
 
         const txBuffer = this._createTransaction(
                         privateKeyRef.value, addressRef.value, amountRef.value);
-
-        // TODO: check whether double/single hash.
+  
         const shaDigest = sha256Hash(txBuffer.toString('hex'));
 
         const privateKeyHex = privateKeyRef.value;
@@ -99,13 +98,6 @@ export default class Transaction extends Component {
         
         const signature = Ecdsa.sign(shaDigest, BigInteger.fromBuffer(ck.privateKey));
         const serializedSignature = signature.toDER();
-
-        // Verification
-        // const isValid = Ecdsa.verify(shaDigest, signature, BigInteger.fromBuffer(ck.publicKey));
-        // console.log('Signature Verification:', isValid);
-
-        // TODO: encode the signature by DER encoding appending the SHA_HASH_FLAG
-        //const serializedSignature = Ecdsa.serializeSig(signature);
 
         this.setState({
             transaction: {
@@ -167,21 +159,30 @@ export default class Transaction extends Component {
             ]
         };
 
-        const bufTxOut = this.serializeTxOut(transaction.vout);
-        console.log(bufTxOut.toString('hex'));
+        const bufTxOutBuf = this.serializeTxOut(transaction.vout);
+        console.log(bufTxOutBuf.toString('hex'));
 
-        const bufTxIn = this._serializeTxIn(transaction.vin);
-        console.log(bufTxIn.toString('hex'));
+        const bufTxInBuf = this._serializeTxIn(transaction.vin);
+        console.log(bufTxInBuf.toString('hex'));
 
-        const versionBuffer = Buffer.alloc(1, transaction.version);
-        const lockTimeBuffer = Buffer.alloc(4, transaction.locktime);
+        // corrected
+        const versionBuffer = Buffer.alloc(4);
+        versionBuffer.writeUInt32LE(transaction.version);
+
+        // corrected
+        const lockTimeBuffer = Buffer.alloc(4);
+        lockTimeBuffer.writeUInt32BE(transaction.locktime);
+
+        const txInCountBuf = varuint.encode(transaction.vin.length);
+        const txOutCountBuf = varuint.encode(transaction.vout.length);
 
         const tx = Buffer.concat([
             versionBuffer,
-            lockTimeBuffer,
-            bufTxIn,
-            bufTxOut,
-            Buffer.alloc(4, 0)      // extra-data
+            txInCountBuf,           // txIn count
+            bufTxInBuf,
+            txOutCountBuf,          // txOut count
+            bufTxOutBuf,
+            lockTimeBuffer          // extra-data
         ]);
 
         console.log('full tx', tx.toString('hex'));
@@ -189,6 +190,7 @@ export default class Transaction extends Component {
         return tx;
     }
 
+    // synced
     serializeTxOut(txOut) {
         const bufList = [];
         for(let out of txOut) {
@@ -198,15 +200,20 @@ export default class Transaction extends Component {
             // 76a914ab68025513c3dbd2f7b92a94e0581f5d50f654e788ac
 
             // tx (hex)
-            // 60e31600000000001976a914ab68025513c3dbd2f7b92a94e0581f5d50f654e788ac
-            // 60e31600000000001976a920ab68025513c3dbd2f7b92a94e0581f5d50f654e788ac
+            // 60e3160000000000 19 76a9 14 ab68025513c3dbd2f7b92a94e0581f5d50f654e788ac
+            // 60e3160000000000 19 76a9 20 ab68025513c3dbd2f7b92a94e0581f5d50f654e788ac   d0ef8000000000001976a9207f9b1a7fb68d60c536c2fd8aeaa53a8f3cc025a888ac
 
             const parsedScriptBuf = this._pareTxOutScript(out.scriptPubKey);
-            const tx = Buffer.alloc(8+1+parsedScriptBuf.length);
+            const tx = Buffer.alloc(8
+                    + varuint.encodingLength(parsedScriptBuf.length)
+                    + parsedScriptBuf.length);
     
             tx.writeIntLE(out.value*1e8, 0, 8);
-            varint.encode(parsedScriptBuf.length, tx, 8);
-            tx.write(parsedScriptBuf.toString('hex'), 8 + varint.encode.bytes, 'hex');
+            varuint.encode(parsedScriptBuf.length, tx, 8);
+            tx.write(parsedScriptBuf.toString('hex'),
+                             8 + varuint.encodingLength(parsedScriptBuf.length), 'hex');
+
+            console.log('txout', tx.toString('hex'));
 
             bufList.push(tx);
         }
@@ -214,23 +221,31 @@ export default class Transaction extends Component {
         return Buffer.concat(bufList);
     }
 
+    // synced with developer guide.
     _serializeTxIn(txIn) {
         const bufList = [];
         for(let tin of txIn) {
             const scriptSize = Buffer.from(tin.scriptSig.toString(16), 'hex').length;
-        
-            const tx = Buffer.alloc(scriptSize + 32 + 4 + 2 + 4);
+            const arb = varuint.encodingLength(47);
+            const tx = Buffer.alloc(scriptSize + 32 + arb + 4 + varuint.encodingLength(scriptSize) + 4);
 
+            // tx outpoint
             tx.write(reverseHexString(tin.txid), 0, 32, 'hex');
-            tx.writeIntBE(tin.vout, 32, 4);
+            tx.writeInt32LE(tin.vout.toString(16), 32);
 
-            // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa35779000000008b483045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e381301410484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adfffffffff
-            // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa357790000000000883045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adfffffffff
+            // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa3577900000000 8b48 3045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130 1410 484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adf ffffffff
+            // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa3577900000000 582f 3045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130      484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adf 00000000
             
-            varint.encode(scriptSize, tx, 36);
+            varuint.encode(scriptSize.toString(16), tx, 36);
+            varuint.encode(47, tx, 36+arb);
 
-            tx.write(tin.scriptSig, 36 + varint.encode.bytes, 'hex');
-            tx.write(tin.sequence.toString(16), 38+scriptSize,'hex');
+            // tin.scriptSig already a hex script
+            tx.write(tin.scriptSig, 36 + arb + varuint.encodingLength(scriptSize), 'hex');
+
+            tx.writeInt32BE(tin.sequence.toString(16), 
+                    36 + arb + varuint.encodingLength(scriptSize) + scriptSize);
+
+            console.log('txin', tx.toString('hex'));
 
             bufList.push(tx);
         }
