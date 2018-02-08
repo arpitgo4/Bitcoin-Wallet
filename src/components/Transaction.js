@@ -221,46 +221,48 @@ export default class Transaction extends Component {
         return Buffer.concat(bufList);
     }
 
-    // synced with developer guide.
+    // correct, working, do not change
     _serializeTxIn(txIn) {
         const bufList = [];
         for(let tin of txIn) {
             const scriptSize = Buffer.from(tin.scriptSig.toString(16), 'hex').length;
 
             const scriptSigBuf = this._parseTxInScript(tin.scriptSig);
-            const scriptSigBufLen = scriptSigBuf.toString('hex').length;
+            const totalScriptSize = scriptSigBuf.length;
 
-            console.log('txin script', scriptSigBuf.toString('hex'));
+            // correct size of the total signature.
+            //console.log('total size in buf', scriptSigBuf.length.toString(16));
 
+            //console.log('txin script', scriptSigBuf.toString('hex'));
+
+            // only writing txid, vout & totalScriptSize
+            // after these concating the buffers.
             let tx = Buffer.alloc(
-                32 + 4 
-                + varuint.encodingLength(scriptSize)
-                + varuint.encodingLength(scriptSigBufLen)
-                + 4
+                32 + 4
+                + varuint.encodingLength(totalScriptSize) 
             );
 
             // tx outpoint
-            tx.write(reverseHexString(tin.txid), 0, 32, 'hex');
-            tx.writeInt32LE(tin.vout.toString(16), 32);
+            tx.write(reverseHexString(tin.txid), 0, 32, 'hex'); // 32 bytes
+            tx.writeInt32LE(tin.vout, 32);      // 4 bytes
 
-            // txin script
-            // fd10013045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adf00
+            varuint.encode(totalScriptSize, tx, 36);  // varuint.encodingLength(totalScriptSize)
 
-            // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa3577900000000 8b48 3045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130 1410 484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adf ffffffff
-            // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa3577900000000 582f 3045022100884d142d86652a3f47ba4746ec719bbfbd040a570b1deccbb6498c75c4ae24cb02204b9f039ff08df09cbe9f6addac960298cad530a863ea8f53982c09db8f6e38130      484ecc0d46f1918b30928fa0e4ed99f16a0fb4fde0735e7ade8416ab9fe423cc5412336376789d172787ec3457eee41c04f4938de5cc17b4a10fa336a8d752adf 00000000
-            
-            varuint.encode(scriptSize.toString(16), tx, 36);
-
-            varuint.encode(scriptSigBufLen, tx, 36+ varuint.encodingLength(scriptSize));
             tx = Buffer.concat([ tx, scriptSigBuf ]);
+            
+            const seqBuf = new Buffer(4);
+            seqBuf.writeUInt32BE(tin.sequence);
 
-            // to add public key, not sure
-
-            tx.writeInt32BE(100, 
-                                36 + varuint.encodingLength(scriptSize)
-                                 + varuint.encodingLength(scriptSigBufLen));
+            tx = Buffer.concat([ tx, seqBuf ]);
 
             console.log('txin', tx.toString('hex'));
+
+            // txin script, correct
+            // 6a 47 3044022034519a85fb5299e180865dda936c5d53edabaaf6d15cd1740aac9878b76238e002207345fcb5a62deeb8d9d80e5b412bd24d09151c2008b7fef10eb5f13e484d1e0d 01 21 0207c9ece04a9b5ef3ff441f3aad6bb63e323c05047a820ab45ebbe61385aa7446ffffffff
+            // 6a 47 3044022034519a85fb5299e180865dda936c5d53edabaaf6d15cd1740aac9878b76238e002207345fcb5a62deeb8d9d80e5b412bd24d09151c2008b7fef10eb5f13e484d1e0d 01 21 0207c9ece04a9b5ef3ff441f3aad6bb63e323c05047a820ab45ebbe61385aa7446ffffffff
+
+            // txin
+            // 186f9f998a5aa6f048e51dd8419a14d8a0f1a8a2836dd734d2804fe65fa3577900000000 6a 47 3044022034519a85fb5299e180865dda936c5d53edabaaf6d15cd1740aac9878b76238e002207345fcb5a62deeb8d9d80e5b412bd24d09151c2008b7fef10eb5f13e484d1e0d01210207c9ece04a9b5ef3ff441f3aad6bb63e323c05047a820ab45ebbe61385aa7446ffffffff
 
             bufList.push(tx);
         }
