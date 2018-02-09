@@ -18,12 +18,15 @@ import {
 } from './utils';
 import { OP_CODES_HEX, SIGHASH } from './constants';
 
+import ReactJson from 'react-json-view';
+
 export default class Transaction extends Component {
 
     constructor(props) {
         super(props);
         this.state = {
-            transaction: null           /* { hex: '', signature: '' } */ 
+            transaction: null,           /* { hex: '', signature: '' } */ 
+            decodedTx: null
         };
     }
 
@@ -59,6 +62,7 @@ export default class Transaction extends Component {
                             className="btn btn-danger btn-lg pull-right">Cancel</button>
                     </div>
                     {this.state.transaction ? this._renderTransaction() : null}
+                    {this.state.decodedTx ? this._renderDecodeTx() : null}
                 </div>
             </div>
         );
@@ -81,6 +85,19 @@ export default class Transaction extends Component {
         );
     }
 
+    _renderDecodeTx() {
+        const { decodedTx } = this.state;
+
+        return (
+            <div className="row">
+                <div className="col-md-12" style={{ wordWrap: 'break-word' }}>
+                    <p className="lead">Transaction Json: </p>
+                    <ReactJson className=" mark" src={decodedTx}></ReactJson>
+                </div>
+            </div>
+        );
+    }
+
     // private_key = new CoinKey().createRandom()
     // public_key = new CoinKey(private_key).publicKey
     // public_address = sha256Hash(public_key)
@@ -98,6 +115,8 @@ export default class Transaction extends Component {
         
         const signature = Ecdsa.sign(shaDigest, BigInteger.fromBuffer(ck.privateKey));
         const serializedSignature = signature.toDER();
+
+        this.fetchDecodedTx(txBuffer);
 
         this.setState({
             transaction: {
@@ -319,6 +338,44 @@ export default class Transaction extends Component {
             pubKeySizeBuf,
             pubKeyBuf
         ]);
+    }
+
+    fetchDecodedTx(txBuffer) {
+        const txHex = txBuffer.toString('hex');
+
+        fetch('https://api.blockcypher.com/v1/bcy/test/txs/decode', {
+            method: 'POST',
+            body: JSON.stringify({ tx : txHex })
+        })
+        .then(res => res.json())
+        .then(decodedTx => {
+            this.setState({
+                decodedTx
+            });
+        })
+        .catch(err => console.log(err));
+    }
+
+    _syntaxHighlight(json) {
+        if (typeof json != 'string') {
+             json = JSON.stringify(json, undefined, 2);
+        }
+        json = json.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+            var cls = 'number';
+            if (/^"/.test(match)) {
+                if (/:$/.test(match)) {
+                    cls = 'key';
+                } else {
+                    cls = 'string';
+                }
+            } else if (/true|false/.test(match)) {
+                cls = 'boolean';
+            } else if (/null/.test(match)) {
+                cls = 'null';
+            }
+            return '<span class="' + cls + '">' + match + '</span>';
+        });
     }
 
 }
