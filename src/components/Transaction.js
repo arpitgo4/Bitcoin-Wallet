@@ -90,7 +90,7 @@ export default class Transaction extends Component {
 
         return (
             <div className="row">
-                <div className="col-md-12" style={{ wordWrap: 'break-word' }}>
+                <div className="col-md-12" style={{ wordWrap: 'break-word', overflow: 'hidden' }}>
                     <p className="lead">Transaction Json: </p>
                     <ReactJson className=" mark" src={decodedTx}></ReactJson>
                 </div>
